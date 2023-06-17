@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+	<meta charset="utf-8" />
+	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+	<link href="css/flower.css" rel="stylesheet" />
+
+
+	<title>Flowers</title>
+</head>
+
+<body>
+	<div id="appContent" style="visibility: hidden">
+
+		<div>
+			<label>store:</label>
+			<select id="store" onclick="laadStoreFlowers()"></select>
+		</div>
+		<br />
+		<table>
+			<tr>
+				<th>Flower</th>
+				<th>Flowertype</th>
+				<th>Storelink</th>
+			</tr>
+			<tbody id="tabelInhoud"></tbody>
+		</table>
+		<div>
+			<label>Flower:</label><input type="text" id="flowername" required /><br />
+			<label>Type:</label><input type="text" id="flowertype" /><br />
+			<button onclick="voegToe()" type="button" id="CUKnop">Toevoegen</button>
+		</div>
+	</div>
+
+	<div id="appLogin" style="visibility: visible">
+		<form action="javascript:void(0);">
+			<input type="email" placeholder="mail" id="mail" required>
+			<input type="password" placeholder="wachtwoord" id="wachtwoord" required>
+			<button type="submit" onclick="login()">Login</button>
+		</form>
+	</div>
+
+	<footer>&copy; 2023 jz </footer>
+</body>
+<script>
+	"use strict"
+	const apiBasis = "http://127.0.0.1:8000/api/"
+	const apiFlowers = apiBasis + "flowers/"
+	const apiStores = apiBasis + "stores/"
+	const apiLogin = apiBasis + "login"
+	let access_token = undefined
+
+	let stores = []
+	let flowers = []
+
+	const laadStores = async () => {
+		const response = await axios.get(apiStores)
+
+		if (response.status != 200) {
+			alert(`Fout bij het lezen van de stores: ${response.status} (${response.statusText})`)
+			return
+		}
+		const json = await response.data
+		// console.log(json)
+		let selectInhoud = ''
+		json.data.map(el => {
+			stores[el.id] = el.store_link
+			selectInhoud += `<option value="${el.id}">${el.store_link}</option>`
+		})
+
+		document.querySelector("#store").innerHTML = selectInhoud
+	}
+	const laadStoreFlowers = async () => {
+		const store = document.querySelector("#store").value;
+		const apiStoreFlowers = `${apiStores}${store}/flowers?sort=flower_name`;
+		console.log(apiStoreFlowers)
+		const response = await axios.get(apiStoreFlowers, {
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json',
+				'Authorization': 'Bearer ' + access_token
+			}
+		});
+
+		if (response.status !== 200) {
+			alert(`Fout bij het lezen van de flowers: ${response.status} (${response.statusText})`);
+			return;
+		}
+
+		const json = await response.data;
+		access_token = json.access_token;
+		flowers = json.data;
+
+		toon();
+	};
+
+	const toon = () => {
+		let tabelInhoud = '';
+		flowers.forEach(el => {
+			tabelInhoud += `
+            <tr>
+                <td>${el.flower_name}</td>
+                <td>${el.flower_type}</td>
+                <td>${stores[el.store_id]}</td>
+                <td onclick="verwijder(${el.id})">x</td>
+                <td><button id="bewerkKnop" onclick="bewerk(${el.id})">Bewerk</button></td>
+            </tr>`;
+		});
+		document.querySelector("#tabelInhoud").innerHTML = tabelInhoud;
+	};
+
+	const laad = async () => {
+		await laadStores();
+		await laadStoreFlowers();
+	};
+
+
+	const voegToe = async () => {
+
+
+		var flower = {};
+
+
+		const store = document.querySelector("#store").value
+		const flowername = document.querySelector("#flowername").value
+		const flowertype = document.querySelector("#flowertype").value
+
+		let response = ''
+		flower.flower_type = flowertype
+		flower.flower_name = flowername
+		flower.store_id = document.getElementById('store').value
+		// console.log(flower)
+		try {
+			response = await axios.post(apiFlowers, flower, {
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'application/json',
+					'Authorization': 'Bearer ' + access_token
+				}
+			})
+		} catch (error) {
+			// console.log(error.response)
+			if (error.response.status == 400) {
+				access_token = error.response.data.access_token
+				alert(`${error.response.data.foutmelding}`)
+				return
+			}
+			alert(
+				`Fout bij het toevoegen van de flower: 
+                ${error.response.status} (${error.response.statusText})
+                \nLog opnieuw aan om een token te verkrijgen`
+			)
+			return
+		}
+
+		if (response.status != 201) {
+			alert(
+				`Fout bij het toevoegen van de flower: ${response.status} (${response.statusText})`
+			)
+			return
+		}
+
+		const json = await response.data
+		access_token = json.access_token
+		// console.log(`Nieuw token na toevoegen ${access_token}.`)
+
+
+		document.querySelector("#flowername").value = ''
+		document.querySelector("#flowertype").value = ''
+
+
+		// console.log('Einde voegToe', access_token)
+		await laadStoreFlowers()
+	}
+	const verwijder = async (id) => {
+		console.log("Begin verwijder: ", id, access_token)
+		const apiDelete = `${apiFlowers}${id}`
+		console.log("api", apiDelete)
+		try {
+			const response = await axios.delete(apiDelete, {
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'application/json',
+					'Authorization': 'Bearer ' + access_token
+				}
+			})
+			if (response.status != 202) {
+				alert(
+					`Fout bij het verwijderen van flower: ${response.status} (${response.statusText})`
+				)
+			}
+			const json = await response.data
+			access_token = json.access_token
+			// console.log(`Nieuw token na verwijderen ${access_token}.`)
+
+			await laadStoreFlowers()
+		} catch (error) {
+			alert(`Fout bij het verwijderen van flower: ${error}`)
+		}
+	}
+
+
+
+	const bewerk = async (id) => {
+
+		let el = flowers.find((x) => x.id == id)
+		console.log(el)
+		// Haal de referenties naar de inputvelden op
+		const flowerInput = document.getElementById('flowername');
+		const typeInput = document.getElementById('flowertype');
+
+
+		// Vul de inputvelden met de huidige gegevens van de flower
+		flowerInput.value = el.flower_name;
+		typeInput.value = el.flower_type;
+
+		// Stel een eventlistener in voor de CUKnop
+		const CUKnop = document.getElementById('CUKnop');
+		CUKnop.innerHTML = "Wijzigen"
+		CUKnop.onclick = function () { bewerkSave(el) };
+	};
+
+	const bewerkSave = async (el) => {
+		console.log('bewerkSave')
+		console.log(el)
+
+		// BEGIN BIJWEREK
+		var flower = {};
+
+		const flowertype = document.querySelector("#flowertype").value
+		const flowername = document.querySelector("#flowername").value
+
+		let response = ''
+		flower.id = el.id
+		flower.flower_type = flowertype
+		flower.flower_name = flowername
+		flower.store_id = el.store_id
+		console.log(flower)
+		console.log(`${apiFlowers}${el.id}`)
+		try {
+			response = await axios.patch(`${apiFlowers}${el.id}`, flower, {
+				
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'application/json',
+					'Authorization': 'Bearer ' + access_token
+				}
+			})
+		} catch (error) {
+			// console.log(error.response)
+			if (error.response.status == 400) {
+				access_token = error.response.data.access_token
+				alert(`${error.response.data.foutmelding}`)
+				return
+			}
+			alert(
+				`Fout bij het wijzigen van de flower: 
+		${error.response.status} (${error.response.statusText})
+		\nLog opnieuw aan om een token te verkrijgen`
+			)
+			return
+		}
+
+		console.log(response.status)
+		if (response.status != 200) {
+			alert(
+				`Fout bij het wijzigen van de flower: ${response.status} (${response.statusText})`
+			)
+			return
+		}
+
+		const json = await response.data
+		access_token = json.access_token
+		// console.log(`Nieuw token na wijzigen ${access_token}.`)
+
+
+		document.querySelector("#flowername").value = ''
+		document.querySelector("#flowertype").value = ''
+
+		// Stel een eventlistener in voor de CUKnop
+		const CUKnop = document.getElementById('CUKnop');
+		CUKnop.innerHTML = "Toevoegen"
+		CUKnop.onclick = function () { voegToe() };
+
+		// Refresh overzicht
+		await laadStoreFlowers()
+	
+	}
+
+
+	const login = async () => {
+		// console.log('Begin Login')
+		const gebruiker = {}
+		gebruiker.password = document.querySelector("#wachtwoord").value
+		gebruiker.email = document.querySelector("#mail").value
+
+		const respons = await axios.post(
+			apiLogin, gebruiker, {
+			headers: { 'Content-Type': 'application/json' }
+		})
+		// console.log('respons', respons)
+		access_token = await respons.data.access_token
+		// console.log('access_token: ', access_token)
+
+		document.querySelector("#appLogin").style.visibility = "hidden"
+		document.querySelector("#appContent").style.visibility = "visible"
+		// console.log('Einde login')
+		await laad()
+	}
+
+
+</script>
+</body>
+
+</html>
